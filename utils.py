@@ -65,7 +65,6 @@ def neural_research_tool(query: str, search_type: str = "auto"):
     response = exa.search(
         query,
         type=search_type,
-        use_autoprompt=True,
         num_results=3,
         contents={"highlights": {"max_characters": 1000}}
     )
