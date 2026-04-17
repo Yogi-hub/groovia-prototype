@@ -1,66 +1,48 @@
+# utils.py
 import os
-from dotenv import load_dotenv
+import io
+import docx2txt
+from pypdf import PdfReader
 from langchain_core.tools import tool
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_community.tools.tavily_search import TavilySearchResults
 from exa_py import Exa
+from config import EXA_API_KEY, TAVILY_API_KEY
 
-# Ensure environment variables are loaded before any clients initialize
-load_dotenv()
+exa = Exa(api_key=EXA_API_KEY)
 
-SUPPORTED_FORMATS = ['.pdf', '.docx']
-SEARCH_RESULTS_K = 5
+def parse_pdf_to_text(file_bytes: bytes) -> str:
+    """Parses raw PDF byte streams into plain text for LLM context injection."""
+    reader = PdfReader(io.BytesIO(file_bytes))
+    return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
 
-# Initialize Exa client
-# Passing the key explicitly is safer for custom deployments
-exa = Exa(api_key=os.getenv("EXA_API_KEY"))
-
-@tool
-def extract_resume_tool(file_path: str) -> str:
-    """
-    Parses a local resume file (PDF or DOCX) and extracts all text content.
-    MANDATORY: Use this as the very first step if the user provides a file path 
-    to understand their technical skills, education, and experience.
-    """
-    _, file_extension = os.path.splitext(file_path)
-    file_extension = file_extension.lower()
-
-    if file_extension == '.pdf':
-        loader = PyPDFLoader(file_path)
-    elif file_extension == '.docx':
-        loader = Docx2txtLoader(file_path)
-    else:
-        return f"Error: Unsupported format. Supported: {SUPPORTED_FORMATS}"
-
-    docs = loader.load()
-    return "\n".join([doc.page_content for doc in docs])
+def parse_docx_to_text(file_bytes: bytes) -> str:
+    """Parses raw DOCX byte streams into plain text for LLM context injection."""
+    return docx2txt.process(io.BytesIO(file_bytes))
 
 @tool
 def career_market_search(query: str) -> str:
     """
-    Broad web search for high-level country overviews, general 2026 economic trends, 
-    and general career advice. 
-    Use this for: 'What is the tech scene like in Germany?' or 'General cost of living'.
-    Returns: A string containing a list of search snippets and URLs.
+    Perform a broad web search for high-level overviews, general trends, 
+    market culture, and general career advice. 
+    Use this for: 'What is the tech scene like in Germany?' or 'General cost of living in Eindhoven'.
+    DO NOT use this for precise government policies, visa details or salary thresholds.
     """
-    search = TavilySearchResults(max_results=SEARCH_RESULTS_K)
+    search = TavilySearchResults(max_results=5)
     results = search.invoke({"query": query})
     return str(results)
 
 @tool
 def neural_research_tool(query: str, search_type: str = "auto"):
     """
-    Advanced Neural Search for precise, factual, and real-time 2026 data.
+    Advanced Neural Search for precise, factual, and real-time data.
     Use this for: 
-    1. Exact visa/immigration law updates (e.g., '30% ruling changes March 2026').
-    2. Specific university course syllabi or credit requirements.
-    3. Deep-dive comparisons between niche technical roles or specific cities.
+    1. Exact visa/immigration law updates (e.g., '30% ruling changes Netherlands 2026').
+    2. Specific university course syllabi, credit requirements, or tuition fees.
+    3. Mandatory salary floors for Skilled Worker visas or EU Blue Cards.
     
     Arguments:
-    - query: A natural language question (e.g., 'Latest Dutch HSM salary thresholds 2026').
-    - search_type: Use 'auto' for facts, 'deep' for complex analytical comparisons.
-    
-    Returns: A list of objects containing URLs and token-efficient content highlights.
+    - query: A specific, natural language question.
+    - search_type: 'auto' for facts, 'deep' for analytical comparisons.
     """
     response = exa.search(
         query,
@@ -68,13 +50,4 @@ def neural_research_tool(query: str, search_type: str = "auto"):
         num_results=3,
         contents={"highlights": {"max_characters": 1000}}
     )
-    
-    formatted_results = []
-    for r in response.results:
-        formatted_results.append({
-            "url": r.url,
-            "published_date": getattr(r, 'published_date', 'N/A'),
-            "summary": r.highlights[0] if r.highlights else "No highlight available."
-        })
-    
-    return formatted_results
+    return [{"url": r.url, "summary": r.highlights[0] if r.highlights else "N/A"} for r in response.results]
