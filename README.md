@@ -2,7 +2,8 @@
 
 Groovia is an agentic AI backend that maps a user's resume to optimal global career or study destinations using real-time search data. It is built with LangGraph (reflection pattern), served via FastAPI, and containerised with Docker.
 
-The frontend (Streamlit) communicates with the backend exclusively through the REST API. 
+The frontend (Streamlit) communicates with the backend exclusively through the REST API.
+
 ---
 
 ## System Architecture (Sequence Diagram)
@@ -17,47 +18,50 @@ sequenceDiagram
     participant Groq as Groq API
     participant Search as Exa / Tavily
 
-    U->>UI: Upload resume + message
+    U->>UI: Upload resume + message (or follow-up)
     UI->>API: POST /chat :8000 (multipart/form-data)
-    API->>API: Validate UUID, file size
+    API->>API: Validate UUID, magic bytes, file size
     API->>API: Parse PDF/DOCX → plain text
-
     API->>Graph: ainvoke(input_state, thread_id)
 
-    Note over Graph: router_node
-    Graph->>Groq: Classify intent (ROUTER_PROMPT)
-    Groq-->>Graph: EXA or TAVILY
-
-    Note over Graph: compressor_node
-    Graph->>Groq: Compress resume (COMPRESSION_PROMPT)
-    Groq-->>Graph: Dense resume summary
+    opt resume_text present and resume_processed = false
+        Note over Graph: compressor_node
+        Graph->>Groq: Compress resume (COMPRESSION_PROMPT)
+        Groq-->>Graph: Dense resume summary
+    end
 
     Note over Graph: agent_node
     Graph->>Groq: Draft response (SYSTEM_PROMPT + context)
-    Groq-->>Graph: Tool call request
 
-    alt TAVILY
+    alt Agent selects Tavily
+        Groq-->>Graph: Tool call → career_market_search
         Graph->>Search: career_market_search(query)
-    else EXA
+    else Agent selects Exa
+        Groq-->>Graph: Tool call → neural_research_tool
         Graph->>Search: neural_research_tool(query)
     end
-    Search-->>Graph: Results
 
+    Search-->>Graph: Search results
     Graph->>Groq: Finalize draft with results
-    Groq-->>Graph: Country report draft
+    Groq-->>Graph: Response draft
 
-    Note over Graph: reviewer_node
-    Graph->>Groq: Audit draft (REVIEWER_PROMPT)
-    Groq-->>Graph: PASSED or critique
+    opt Response contains ### country headers
+        Note over Graph: reviewer_node
+        Graph->>Groq: Audit draft (REVIEWER_PROMPT)
+        Groq-->>Graph: PASSED or critique
 
-    alt revision_count < MAX_REVISION and not PASSED
-        Graph->>Groq: Revise with critique
-        Groq-->>Graph: Revised report
+        alt revision_count < MAX_REVISION and not PASSED
+            Note over Graph: agent_node (revision)
+            Graph->>Groq: Revise with critique
+            Groq-->>Graph: Revised report
+        end
+
+        Note over Graph: phase → "qa" on PASSED
     end
 
     Graph-->>API: final_state
     API-->>UI: 200 OK + JSON
-    UI-->>U: Display report
+    UI-->>U: Display response
 ```
 
 ---
@@ -108,6 +112,7 @@ Accepts a user message and optional resume file. Maintains conversation state ac
 |---|---|
 | 400 | Invalid `thread_id` format |
 | 413 | File exceeds 5MB limit |
+| 415 | Unsupported or mismatched file type |
 | 504 | Agent timed out (> 120s) |
 | 500 | Internal agent error |
 
@@ -119,18 +124,23 @@ Returns `{"status": "ok"}`. Used by Docker and Render for readiness checks.
 
 ## Agent Graph
 
-The graph follows a **reflection pattern**:
+The graph follows a **reflection pattern** with phase-aware routing to minimise LLM calls on follow-up turns.
 
 ```
-START → router → compressor → agent → tools → agent → reviewer → agent (if rejected) → END
+START → (compressor) → agent → tools → agent → (reviewer) → agent (if rejected) → END
 ```
 
-| Node | Role |
-|---|---|
-| `router_node` | Classifies query intent → routes to Exa or Tavily |
-| `compressor_node` | Summarises raw resume text once per session |
-| `agent_node` | Drafts the career/study report using tools |
-| `reviewer_node` | Audits the draft against a quality checklist |
+The compressor and reviewer are conditional — they only run when needed:
+
+| Node | Trigger | Role |
+|---|---|---|
+| `compressor_node` | New unprocessed resume in state | Compresses raw resume text once per session |
+| `agent_node` | Every turn | Drafts the response using tools |
+| `reviewer_node` | Response contains `###` country headers | Audits the draft against a quality checklist |
+
+Once the country report passes review, `phase` is set to `"qa"`. All follow-up turns go directly `START → agent → END`, skipping the compressor and reviewer entirely.
+
+The agent self-selects between Tavily and Exa on each tool call based on the tool descriptions — no separate router LLM call is needed.
 
 The reviewer rejects and re-queues the draft up to `MAX_REVISION` times before passing it regardless.
 
@@ -150,20 +160,20 @@ EXA_API_KEY=your_exa_key
 
 ## Running Locally
 
-**Without Docker**
-
 ```bash
 pip install -r requirements.txt
 uvicorn main:api --host 0.0.0.0 --port 8000 --reload
 ```
 
-**With Docker**
+The API will be available at `http://localhost:8000`.
+
+To run both services together with Docker:
 
 ```bash
 docker compose up --build
 ```
 
-The API will be available at `http://localhost:8000`.
+API at `http://localhost:8000` · UI at `http://localhost:8501`.
 
 ---
 
@@ -182,12 +192,12 @@ All tunable parameters are in `config.py`:
 
 ## Deployment
 
-The backend is designed to deploy as a single container on Render, Railway, or any Docker-compatible host.
+The backend deploys to Render as a Docker Web Service.
 
 1. Push the repo to GitHub.
 2. Create a new **Web Service** on Render, connect the repo.
-3. Set the environment variables in the Render dashboard (do not commit `.env`).
-4. Render will detect `docker-compose.yaml` or the `Dockerfile` automatically.
+3. Set the runtime to **Docker** — Render will build from the `Dockerfile` automatically.
+4. Set the environment variables in the Render dashboard (do not commit `.env`).
 5. The `/health` endpoint is used as the health check URL.
 
 > **Note:** `MemorySaver` stores conversation state in-process. A container restart will clear all session history. A persistent checkpointer (Redis or Postgres) is planned for a future release.
@@ -196,4 +206,4 @@ The backend is designed to deploy as a single container on Render, Railway, or a
 
 ## Frontend
 
-The Streamlit frontend (`app.py`) is maintained as a separate service and is not included in this container. It communicates with this backend via the `/chat` endpoint using `requests.post`.
+The Streamlit frontend (`app.py`) is maintained as a separate service and is not included in this container. It communicates with the backend via the `/chat` endpoint and resolves the API address from the `BACKEND_URL` environment variable.
