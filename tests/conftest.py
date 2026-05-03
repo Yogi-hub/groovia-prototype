@@ -1,6 +1,5 @@
 import io
 import os
-import uuid
 
 import pytest
 from unittest.mock import MagicMock, patch

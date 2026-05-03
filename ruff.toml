@@ -1,14 +1,15 @@
-[lint]
-select = ["E", "F"]
-ignore = ["E501"]
-
-[lint.per-file-ignores]
-"tests/*" = ["E402"]
-
 exclude = [
     "Lib",
     "Scripts",
     "Include",
     "share",
     "__pycache__",
+    "prototype.ipynb",
 ]
+
+[lint]
+select = ["E", "F"]
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+"tests/*" = ["E402"]
