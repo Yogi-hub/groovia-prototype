@@ -23,7 +23,9 @@ def test_parse_docx_calls_docx2txt():
 
 def test_general_search_returns_error_string_on_exception():
     from utils import general_search
-    with patch("utils._tavily.invoke", side_effect=RuntimeError("network error")):
+    mock_tavily = MagicMock()
+    mock_tavily.invoke.side_effect = RuntimeError("network error")
+    with patch("utils._tavily", mock_tavily):
         result = general_search.invoke({"query": "tech jobs in Germany"})
     assert "[SEARCH_ERROR]" in result
     assert "general_search" in result
@@ -40,7 +42,9 @@ def test_precise_search_returns_error_string_on_exception():
 def test_general_search_returns_string_on_success():
     from utils import general_search
     mock_result = [{"title": "Tech scene in Germany", "url": "https://example.com", "content": "Germany has a booming tech sector."}]
-    with patch("utils._tavily.invoke", return_value=mock_result):
+    mock_tavily = MagicMock()
+    mock_tavily.invoke.return_value = mock_result
+    with patch("utils._tavily", mock_tavily):
         result = general_search.invoke({"query": "tech scene Germany"})
     assert isinstance(result, str)
     assert len(result) > 0
