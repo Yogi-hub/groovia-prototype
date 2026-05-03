@@ -36,14 +36,21 @@ def sample_pdf_bytes():
 @pytest.fixture
 def mock_llm():
     """
-    Patches primary_llm and review_llm in backend so no real Groq API calls are made.
-    Covers both direct .invoke() and .bind_tools().invoke() call paths.
+    Replaces primary_llm and review_llm module variables so no real Groq calls are made.
+    ChatGroq is a frozen Pydantic model — patching attributes directly raises ValueError.
+    Replacing the whole object is the only reliable approach.
     """
     mock_response = AIMessage(content="Mock LLM response.")
     mock_bound = MagicMock()
     mock_bound.invoke.return_value = mock_response
 
-    with patch("backend.primary_llm.invoke", return_value=mock_response), \
-         patch("backend.primary_llm.bind_tools", return_value=mock_bound), \
-         patch("backend.review_llm.invoke", return_value=mock_response):
+    mock_primary = MagicMock()
+    mock_primary.invoke.return_value = mock_response
+    mock_primary.bind_tools.return_value = mock_bound
+
+    mock_review = MagicMock()
+    mock_review.invoke.return_value = mock_response
+
+    with patch("backend.primary_llm", mock_primary), \
+         patch("backend.review_llm", mock_review):
         yield mock_response

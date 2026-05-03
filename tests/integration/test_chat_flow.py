@@ -40,9 +40,15 @@ def test_resume_upload_runs_compressor(client, sample_pdf_bytes):
     mock_bound = MagicMock()
     mock_bound.invoke.return_value = intake_response
 
-    with patch("backend.review_llm.invoke", return_value=compress_response), \
-         patch("backend.primary_llm.invoke", return_value=intake_response), \
-         patch("backend.primary_llm.bind_tools", return_value=mock_bound):
+    mock_primary = MagicMock()
+    mock_primary.invoke.return_value = intake_response
+    mock_primary.bind_tools.return_value = mock_bound
+
+    mock_review = MagicMock()
+    mock_review.invoke.return_value = compress_response
+
+    with patch("backend.primary_llm", mock_primary), \
+         patch("backend.review_llm", mock_review):
 
         resp = client.post(
             "/chat",
@@ -70,9 +76,15 @@ def test_track_tag_detected_and_stripped(client, sample_pdf_bytes):
     mock_bound = MagicMock()
     mock_bound.invoke.return_value = AIMessage(content="Report placeholder.")
 
-    with patch("backend.review_llm.invoke", return_value=compress_response), \
-         patch("backend.primary_llm.invoke", return_value=intake_work_response), \
-         patch("backend.primary_llm.bind_tools", return_value=mock_bound):
+    mock_primary = MagicMock()
+    mock_primary.invoke.return_value = intake_work_response
+    mock_primary.bind_tools.return_value = mock_bound
+
+    mock_review = MagicMock()
+    mock_review.invoke.return_value = compress_response
+
+    with patch("backend.primary_llm", mock_primary), \
+         patch("backend.review_llm", mock_review):
 
         thread_id = str(uuid.uuid4())
         # Upload resume
