@@ -251,7 +251,7 @@ def should_revise(state: AgentState) -> str:
     phase    = state.get("phase") or "no_resume"
 
     if "PASSED" in critique:
-        print(f"[REVISE] PASSED → end")
+        print("[REVISE] PASSED → end")
         return "end"
 
     if phase == "report":
