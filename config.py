@@ -1,0 +1,30 @@
+# config.py
+# Configuration mapping
+import os
+import sys
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+EXA_API_KEY = os.getenv("EXA_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")           # https://<ref>.supabase.co
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")           # anon or service_role key from Supabase dashboard
+MENTOR_BOOKING_COL = os.getenv("MENTOR_BOOKING_COL", "booking_url")  # actual column name in your mentors table
+
+MAIN_MODEL_NAME = os.getenv("MAIN_MODEL_NAME", "llama-3.3-70b-versatile")
+REVIEW_MODEL_NAME = os.getenv("REVIEW_MODEL_NAME", "llama-3.1-8b-instant")
+TEMPERATURE = 0.0
+
+NUM_COUNTRIES = 3
+MAX_REVISION = 1
+MAX_TOOL_ITERATIONS = 2
+
+PORT = int(os.getenv("PORT", 8000))
+HOST = "0.0.0.0"
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:8501,http://localhost:8502,http://localhost:8503").split(",")
+
+_missing = [k for k, v in {"GROQ_API_KEY": GROQ_API_KEY, "TAVILY_API_KEY": TAVILY_API_KEY, "EXA_API_KEY": EXA_API_KEY, "SUPABASE_URL": SUPABASE_URL, "SUPABASE_KEY": SUPABASE_KEY}.items() if not v]
+if _missing:
+    sys.exit(f"[FATAL] Missing required environment variables: {', '.join(_missing)}")

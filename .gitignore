@@ -1,0 +1,28 @@
+# Environments
+assistance_agent/
+venv/
+env/
+.venv/
+
+# Secrets
+.env
+.env.example
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.venv/
+*.pyc
+share/
+Include/
+Lib/
+Scripts/
+
+# Jupyter
+.ipynb_checkpoints/
+
+data/
+etc/
+pyvenv.cfg
+
+*visualization.png
